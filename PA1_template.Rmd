@@ -5,21 +5,122 @@ output:
     keep_md: true
 ---
 
+Load library
+
+```{r, message=FALSE}
+library(tidyverse)
+library(recipes)
+```
 
 ## Loading and preprocessing the data
 
+```{r}
+activity <- read_csv("activity.zip", col_types = cols(date = col_date(format = "%Y-%m-%d"), 
+                                                      steps = col_integer()), na = "NA")
+```
 
+```{r}
+activity
+```
 
 ## What is mean total number of steps taken per day?
 
+Here's the histgram
+```{r}
+activity %>% group_by(date) %>% 
+    ggplot(aes(steps)) + geom_histogram(bins = 40)
+```
+
+For mean and median
+```{r}
+activity %>% group_by(date) %>% 
+    summarise(mean = mean(steps, na.rm = T),
+              median = median(steps, na.rm = T))
+
+```
 
 
 ## What is the average daily activity pattern?
 
 
+Here's the line plot
+```{r}
+activity %>% group_by(interval) %>% 
+    summarise( m_steps = mean(steps, na.rm = T)) %>% 
+    ggplot(aes(interval, m_steps)) + geom_line()
+```
 
+The interval 835 has the maximum number of steps.
+```{r}
+activity %>% group_by(interval) %>% 
+    summarise( m_steps = mean(steps, na.rm = T)) %>% 
+    arrange(desc(m_steps)) %>% slice(1)
+```
 ## Imputing missing values
 
+From below, here are 2304 row contain NA. 
+```{r}
+activity %>% filter(is.na(steps) | is.na(interval) | is.na(date)) %>% 
+    summarise(n_NA = n())
+```
+
+impute steps with mean, use floor values to keep it as integer.
+```{r}
+imp_fun <- function(dat){
+    dat %>% recipe(~steps + date, data = .) %>% 
+                 step_meanimpute(steps) %>% prep(retain = T) %>% 
+                 juice()
+}
+nes <- activity %>% group_by(interval) %>% 
+    nest() %>% mutate(data = map(data, imp_fun))
+                        
+imputed_df <- nes %>% unnest() %>% mutate(steps = as.integer(steps)) %>% arrange(date)
+
+imputed_df
+```
+
+```{r}
+imputed_df %>% group_by(date) %>% 
+    ggplot(aes(steps)) + geom_histogram(bins = 40)
+```
+```{r}
+imputed_df%>% group_by(date) %>% 
+    summarise(mean = mean(steps, na.rm = T),
+              median = median(steps, na.rm = T))
+```
+The result doesn't change much. Some days which are previous NA now have values.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+
+Here's the dataframe after adding the new factor variable.
+```{r}
+imp_fac <- imputed_df %>% mutate(wd = case_when(weekdays(date) %in% c("Saturday", "Sunday") ~ "Weekend",
+                                     TRUE ~ "weekday")) %>% mutate(wd = factor(wd))
+imp_fac
+```
+Here are the plots.
+```{r}
+imp_fac %>% group_by(wd,interval) %>% summarise(m_steps = mean(steps, na.rm = T)) %>% 
+    ggplot(aes(x = interval, y =m_steps)) + geom_line() + facet_grid(wd~.) + ylab("number of steps")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
